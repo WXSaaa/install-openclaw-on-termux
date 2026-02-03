@@ -347,9 +347,9 @@ export OPENCLAW_GATEWAY_TOKEN=$TOKEN
 export PATH=\$NPM_BIN:\$PATH
 sshd 2>/dev/null
 termux-wake-lock 2>/dev/null
-alias ocr="pkill -9 node 2>/dev/null; tmux kill-session -t openclaw 2>/dev/null; sleep 1; tmux new -d -s openclaw; sleep 1; tmux send-keys -t openclaw \"export PATH=$NPM_BIN:$PATH TMPDIR=\$HOME/tmp; export OPENCLAW_GATEWAY_TOKEN=$TOKEN; openclaw gateway --bind lan --port $PORT --token \$OPENCLAW_GATEWAY_TOKEN --allow-unconfigured\" C-m"
+alias ocr="pkill -9 -f 'openclaw' 2>/dev/null; tmux kill-session -t openclaw 2>/dev/null; sleep 1; tmux new -d -s openclaw; sleep 1; tmux send-keys -t openclaw \"export PATH=$NPM_BIN:$PATH TMPDIR=\$HOME/tmp; export OPENCLAW_GATEWAY_TOKEN=$TOKEN; openclaw gateway --bind lan --port $PORT --token \$OPENCLAW_GATEWAY_TOKEN --allow-unconfigured\" C-m"
 alias oclog='tmux attach -t openclaw'
-alias ockill='pkill -9 node 2>/dev/null; tmux kill-session -t openclaw 2>/dev/null'
+alias ockill='pkill -9 -f "openclaw" 2>/dev/null; tmux kill-session -t openclaw 2>/dev/null'
 # --- OpenClaw End ---
 EOT
 
@@ -382,10 +382,30 @@ start_service() {
     log "启动服务"
     echo -e "${YELLOW}[5/6] 启动服务...${NC}"
 
-    # 1. 防止 pkill 报错导致脚本退出
-    pkill -9 node 2>/dev/null || true
-    tmux kill-session -t openclaw 2>/dev/null || true
-    sleep 1
+    # 检查是否有实例在运行
+    RUNNING_PROCESS=$(pgrep -f "openclaw gateway" 2>/dev/null || true)
+    HAS_TMUX_SESSION=$(tmux has-session -t openclaw 2>/dev/null && echo "yes" || echo "no")
+
+    if [ -n "$RUNNING_PROCESS" ] || [ "$HAS_TMUX_SESSION" = "yes" ]; then
+        log "发现已有 Openclaw 实例在运行"
+        echo -e "${YELLOW}⚠️  检测到 Openclaw 实例已在运行${NC}"
+        echo -e "${BLUE}运行中的进程: $RUNNING_PROCESS${NC}"
+        read -p "是否停止旧实例并启动新实例? (y/n) [默认: y]: " RESTART_CHOICE
+        RESTART_CHOICE=${RESTART_CHOICE:-y}
+
+        if [ "$RESTART_CHOICE" = "y" ] || [ "$RESTART_CHOICE" = "Y" ]; then
+            log "停止旧实例"
+            echo -e "${YELLOW}正在停止旧实例...${NC}"
+            # 只停止 openclaw 相关进程，不杀死所有 node 进程
+            pkill -9 -f "openclaw" 2>/dev/null || true
+            tmux kill-session -t openclaw 2>/dev/null || true
+            sleep 1
+        else
+            log "用户选择不重启"
+            echo -e "${GREEN}跳过启动，保持当前实例运行${NC}"
+            return 0
+        fi
+    fi
 
     # 2. 确保目录存在
     mkdir -p "$HOME/tmp"
