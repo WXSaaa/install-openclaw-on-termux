@@ -287,6 +287,14 @@ apply_patches() {
     log "开始应用补丁"
     echo -e "${YELLOW}[3/6] 正在应用 Android 兼容性补丁...${NC}"
 
+    # 确保 /tmp 目录和符号链接存在（防止更新后失效）
+    log "检查 /tmp 兼容性配置"
+    mkdir -p /tmp 2>/dev/null || true
+    if [ -d "/tmp" ]; then
+        rm -rf /tmp/openclaw 2>/dev/null || true
+        ln -sf "$LOG_DIR" /tmp/openclaw 2>/dev/null || true
+    fi
+
     # 修复 Logger
     LOGGER_FILE="$BASE_DIR/dist/logging/logger.js"
     if [ -f "$LOGGER_FILE" ]; then
